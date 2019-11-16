@@ -13,8 +13,7 @@ use libc::c_void;
 use libc::{c_char,c_ushort,c_int};
 use libc::{in_addr,in6_addr};
 use nix::sys::socket::{sockaddr_in,sockaddr};
-use futures::sync::mpsc::Receiver;
-use futures::sync::mpsc::Sender;
+use tokio::sync::mpsc::{self, Receiver, Sender};
 use tokio::prelude::*;
 use tokio::fs::File;
 
@@ -54,7 +53,7 @@ impl Default for InterfaceRequest16 {
 		InterfaceRequest16 {
 			name: [0; IFNAMSIZ],
 			flags: 0,
-		}		
+		}
 	}
 }
 
@@ -63,7 +62,7 @@ impl Default for InterfaceRequest32 {
 		InterfaceRequest32 {
 			name: [0; IFNAMSIZ],
 			flags: 0,
-		}		
+		}
 	}
 }
 
@@ -79,7 +78,7 @@ impl Default for InterfaceRequestSockaddrIn {
 				},
 				sin_zero:   [0;8],
 			}
-		}		
+		}
 	}
 }
 
@@ -91,7 +90,7 @@ impl Default for InterfaceRequestSockaddr {
 				sa_family: 0,
 				sa_data:   [0;14]
 			}
-		}		
+		}
 	}
 }
 
@@ -189,11 +188,11 @@ impl TunTap {
 			name: ifr_create.name,
 		};
 
-		let (your_tx, mut my_rx): (Sender<Vec<u8>>,_) = futures::sync::mpsc::channel(128 * 1024);
-		let (mut my_tx, your_rx): (Sender<Vec<u8>>,_) = futures::sync::mpsc::channel(128 * 1024);
+		let (your_tx, mut my_rx): (Sender<Vec<u8>>,_) = mpsc::channel(128 * 1024);
+		let (mut my_tx, your_rx): (Sender<Vec<u8>>,_) = mpsc::channel(128 * 1024);
 
-		tokio::spawn_async(async move {
-			while let Some(Ok(packet)) = await!(my_rx.next()) {
+		tokio::spawn(async move {
+			while let Some(packet) = my_rx.next().await {
 				let ptr = packet.as_slice().as_ptr();
 				unsafe {
 					write(fd, ptr as *const c_void, packet.len() as usize);
@@ -201,11 +200,11 @@ impl TunTap {
 			}
 		});
 
-		tokio::spawn_async(async move {
+		tokio::spawn(async move {
 			let mut buf = [0; 2048];
 			loop {
-				match await!(file.read_async(&mut buf)) {
-					Ok(n) => await!(my_tx.send_async(buf[..n].to_vec())).unwrap(),
+				match file.read(&mut buf).await {
+					Ok(n) => my_tx.send(buf[..n].to_vec()).await.unwrap(),
 					_ => break
 				};
 			}
@@ -229,62 +228,6 @@ impl TunTap {
 		};
 		unsafe { ioctl!(self.sock4, IoCtlRequest::SIOCSIFMTU, &ifr) }
 	}
-
-	/*
-	pub fn set_mac(self, mac: [u8;6]) -> IoResult<()> {
-		// only works on TAPs!
-		// but still fails - why? TODO
-		let mut ifr = InterfaceRequestSockaddr {
-			name: self.name,
-			..Default::default()
-		};
-		ifr.sockaddr.sa_family = AF_INET as c_ushort;
-		for (i, b) in mac.iter().enumerate() {
-			ifr.sockaddr.sa_data[i] = *b;
-		}
-		unsafe { ioctl!(self.sock4, SIOCSIFHWADDR, &ifr) }
-	}*/
-/*
-	pub fn set_ipv4(self, ipv4: &'static str) -> IoResult<()> {
-		let mut ifr_ipaddr = InterfaceRequestSockaddrIn {
-			name:     self.name,
-			..Default::default()
-		};
-		ifr_ipaddr.sockaddr.sin_family = AF_INET as c_ushort;
-		let ip = ::std::ffi::CString::new(ipv4.as_bytes()).unwrap();
-		let res = unsafe { inet_pton(AF_INET, ip.as_ptr(),
-								&mut ifr_ipaddr.sockaddr.sin_addr) == 1 };
-		if !res {
-			return Err(IoError::last_os_error());
-		}
-
-		unsafe { ioctl!(self.sock4, IoCtlRequest::SIOCSIFADDR, &ifr_ipaddr) }
-	}
-
-	pub fn set_ipv6(self, ipv6: &'static str) -> IoResult<()> {
-		let mut ifr = InterfaceRequest32 {
-			name: self.name,
-			..Default::default()
-		};
-		let res = unsafe { ioctl!(self.sock6, IoCtlRequest::SIOGIFINDEX, &mut ifr) };
-		if res.is_err() {
-			return Err(res.unwrap_err());
-		}
-
-		let mut ifr6 = InterfaceRequestIn6 {
-			addr:      in6_addr { s6_addr: [0; 16] },
-			prefixlen: 64,
-			ifindex:   ifr.flags,
-		};
-
-		let ip = ::std::ffi::CString::new(ipv6.as_bytes()).unwrap();
-		let res = unsafe { inet_pton(AF_INET6, ip.as_ptr(),
-								::std::mem::transmute(&mut (ifr6.addr.s6_addr))) == 1 };
-		if !res {
-			return Err(IoError::last_os_error());
-		}
-		unsafe { ioctl!(self.sock6, IoCtlRequest::SIOCSIFADDR, &ifr6) }
-	}*/
 
 	pub fn set_ip(&mut self, addr: std::net::IpAddr) -> IoResult<()> {
 		let addr = nix::sys::socket::InetAddr::from_std(&(addr, 0).into());
