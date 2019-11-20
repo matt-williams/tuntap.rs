@@ -104,14 +104,17 @@ extern "C" {
 
 bitflags! {
 	pub struct TunTapFlags: u16 {
-		const IFF_UP        = 1<<0;
-		const IFF_RUNNING   = 1<<6;
-		const IFF_TUN       = 0x0001;
-		const IFF_TAP       = 0x0002;
-		const IFF_NO_PI     = 0x0100;
-		const IFF_ONE_QUEUE = 0x0200;
-		const IFF_VNET_HDR  = 0x0400;
-		const IFF_TUN_EXCL  = 0x0800;
+		const IFF_UP           = 1<<0;
+		const IFF_RUNNING      = 1<<6;
+		const IFF_TUN          = 0x0001;
+		const IFF_TAP          = 0x0002;
+		const IFF_MULTI_QUEUE  = 0x0100;
+		const IFF_ATTACH_QUEUE = 0x0200;
+		const IFF_DETACH_QUEUE = 0x0400;
+		const IFF_NO_PI        = 0x1000;
+		const IFF_ONE_QUEUE    = 0x2000;
+		const IFF_VNET_HDR     = 0x4000;
+		const IFF_TUN_EXCL     = 0x8000;
 	}
 }
 
