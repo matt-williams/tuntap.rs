@@ -118,9 +118,14 @@ bitflags! {
 	}
 }
 
+#[cfg(target_env = "musl")]
+type IoCtlRequestType = i32;
+#[cfg(not(target_env = "musl"))]
+type IoCtlRequestType = u64;
+
 bitflags! {
 	#[repr(C)]
-	struct IoCtlRequest: u64 {
+	struct IoCtlRequest: IoCtlRequestType {
 		const TUNSETIFF      = 0x400454ca;
 		const TUNSETOWNER    = 0x400454cc;
 		const TUNSETGROUP    = 0x400454ce;
